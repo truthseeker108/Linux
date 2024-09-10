@@ -1,0 +1,6 @@
+# Shell commmands
+## Disk usage 
+### check the size of a directory along with all its subdirectories 
+...
+du -sh /path/to/directory
+...
