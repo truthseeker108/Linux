@@ -1,0 +1,218 @@
+version: '3.8'
+
+services:
+  # PostgreSQL adatbázis
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: netbox_password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - netbox-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netbox"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - netbox-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis cache (tasking)
+  redis-cache:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_cache_data:/data
+    restart: unless-stopped
+    networks:
+      - netbox-network
+
+  # NetBox alkalmazás
+  netbox:
+    image: netboxcommunity/netbox:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      CORS_ORIGIN_ALLOW_ALL: 'True'
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_PASSWORD: netbox_password
+      DB_USER: netbox
+      EMAIL_FROM: netbox@example.com
+      EMAIL_PASSWORD: ''
+      EMAIL_PORT: 25
+      EMAIL_SERVER: localhost
+      EMAIL_TIMEOUT: 5
+      EMAIL_USERNAME: netbox
+      EMAIL_USE_SSL: 'False'
+      EMAIL_USE_TLS: 'False'
+      GRAPHQL_ENABLED: 'True'
+      HOUSEKEEPING_INTERVAL: 86400
+      MEDIA_ROOT: /opt/netbox/netbox/media
+      METRICS_ENABLED: 'False'
+      REDIS_CACHE_DATABASE: 1
+      REDIS_CACHE_HOST: redis-cache
+      REDIS_CACHE_INSECURE_SKIP_TLS_VERIFY: 'False'
+      REDIS_CACHE_PASSWORD: ''
+      REDIS_CACHE_SSL: 'False'
+      REDIS_DATABASE: 0
+      REDIS_HOST: redis
+      REDIS_INSECURE_SKIP_TLS_VERIFY: 'False'
+      REDIS_PASSWORD: ''
+      REDIS_SSL: 'False'
+      RELEASE_CHECK_URL: https://api.github.com/repos/netbox-community/netbox/releases
+      SECRET_KEY: 'r8OwDznj!!dci#P9ghmRfdu1Ysxm0AiPeDCQhKE+N_rClfWNj'
+      SKIP_SUPERUSER: 'false'
+      SUPERUSER_API_TOKEN: '0123456789abcdef0123456789abcdef01234567'
+      SUPERUSER_EMAIL: admin@example.com
+      SUPERUSER_NAME: admin
+      SUPERUSER_PASSWORD: admin
+      TIME_ZONE: Europe/Budapest
+      WEBHOOKS_ENABLED: 'True'
+    ports:
+      - "8000:8080"
+    volumes:
+      - netbox_media:/opt/netbox/netbox/media
+      - netbox_reports:/opt/netbox/netbox/reports
+      - netbox_scripts:/opt/netbox/netbox/scripts
+    restart: unless-stopped
+    networks:
+      - netbox-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # NetBox Worker (háttérfolyamatok)
+  netbox-worker:
+    image: netboxcommunity/netbox:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      CORS_ORIGIN_ALLOW_ALL: 'True'
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_PASSWORD: netbox_password
+      DB_USER: netbox
+      EMAIL_FROM: netbox@example.com
+      EMAIL_PASSWORD: ''
+      EMAIL_PORT: 25
+      EMAIL_SERVER: localhost
+      EMAIL_TIMEOUT: 5
+      EMAIL_USERNAME: netbox
+      EMAIL_USE_SSL: 'False'
+      EMAIL_USE_TLS: 'False'
+      GRAPHQL_ENABLED: 'True'
+      HOUSEKEEPING_INTERVAL: 86400
+      MEDIA_ROOT: /opt/netbox/netbox/media
+      METRICS_ENABLED: 'False'
+      REDIS_CACHE_DATABASE: 1
+      REDIS_CACHE_HOST: redis-cache
+      REDIS_CACHE_INSECURE_SKIP_TLS_VERIFY: 'False'
+      REDIS_CACHE_PASSWORD: ''
+      REDIS_CACHE_SSL: 'False'
+      REDIS_DATABASE: 0
+      REDIS_HOST: redis
+      REDIS_INSECURE_SKIP_TLS_VERIFY: 'False'
+      REDIS_PASSWORD: ''
+      REDIS_SSL: 'False'
+      RELEASE_CHECK_URL: https://api.github.com/repos/netbox-community/netbox/releases
+      SECRET_KEY: 'r8OwDznj!!dci#P9ghmRfdu1Ysxm0AiPeDCQhKE+N_rClfWNj'
+      SKIP_SUPERUSER: 'true'
+      TIME_ZONE: Europe/Budapest
+      WEBHOOKS_ENABLED: 'True'
+    command: /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker
+    volumes:
+      - netbox_media:/opt/netbox/netbox/media
+      - netbox_reports:/opt/netbox/netbox/reports
+      - netbox_scripts:/opt/netbox/netbox/scripts
+    restart: unless-stopped
+    networks:
+      - netbox-network
+
+  # NetBox Housekeeping (karbantartás)
+  netbox-housekeeping:
+    image: netboxcommunity/netbox:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      CORS_ORIGIN_ALLOW_ALL: 'True'
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_PASSWORD: netbox_password
+      DB_USER: netbox
+      EMAIL_FROM: netbox@example.com
+      EMAIL_PASSWORD: ''
+      EMAIL_PORT: 25
+      EMAIL_SERVER: localhost
+      EMAIL_TIMEOUT: 5
+      EMAIL_USERNAME: netbox
+      EMAIL_USE_SSL: 'False'
+      EMAIL_USE_TLS: 'False'
+      GRAPHQL_ENABLED: 'True'
+      HOUSEKEEPING_INTERVAL: 86400
+      MEDIA_ROOT: /opt/netbox/netbox/media
+      METRICS_ENABLED: 'False'
+      REDIS_CACHE_DATABASE: 1
+      REDIS_CACHE_HOST: redis-cache
+      REDIS_CACHE_INSECURE_SKIP_TLS_VERIFY: 'False'
+      REDIS_CACHE_PASSWORD: ''
+      REDIS_CACHE_SSL: 'False'
+      REDIS_DATABASE: 0
+      REDIS_HOST: redis
+      REDIS_INSECURE_SKIP_TLS_VERIFY: 'False'
+      REDIS_PASSWORD: ''
+      REDIS_SSL: 'False'
+      RELEASE_CHECK_URL: https://api.github.com/repos/netbox-community/netbox/releases
+      SECRET_KEY: 'r8OwDznj!!dci#P9ghmRfdu1Ysxm0AiPeDCQhKE+N_rClfWNj'
+      SKIP_SUPERUSER: 'true'
+      TIME_ZONE: Europe/Budapest
+      WEBHOOKS_ENABLED: 'True'
+    command: /opt/netbox/housekeeping.sh
+    volumes:
+      - netbox_media:/opt/netbox/netbox/media
+      - netbox_reports:/opt/netbox/netbox/reports
+      - netbox_scripts:/opt/netbox/netbox/scripts
+    restart: unless-stopped
+    networks:
+      - netbox-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  redis_cache_data:
+  netbox_media:
+  netbox_reports:
+  netbox_scripts:
+
+networks:
+  netbox-network:
+    driver: bridge
